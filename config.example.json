@@ -1,0 +1,12 @@
+{
+  "compartment_id": "ocid1.compartment.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "image_id": "ocid1.image.oc1.REGION.aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "subnet_id": "ocid1.subnet.oc1.REGION.aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "region": "us-ashburn-1",
+  "ocpu_count": 4,
+  "memory_in_gbs": 24,
+  "ssh_key_path": "~/.ssh/id_rsa.pub",
+  "display_name": "AlwaysFree-ARM-Instance",
+  "rate_limit_wait": 90,
+  "rate_limit_cooldown": 300
+}

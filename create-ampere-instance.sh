@@ -88,7 +88,7 @@ do
             --subnet-id "$SUBNET_ID" \
             --availability-domain "$AD" \
             --shape "VM.Standard.A1.Flex" \
-            --shape-config "{\"ocpus\":$OCPU_COUNT, \"memoryInGBs\":$MEMORY_IN_GBS}" \
+            --shape-config '{"ocpus":'"$OCPU_COUNT"',"memoryInGBs":'"$MEMORY_IN_GBS"'}' \
             --ssh-authorized-keys-file <(echo "$SSH_KEY") \
             --display-name "AlwaysFree-ARM-Instance" \
             --assign-private-dns-record true \

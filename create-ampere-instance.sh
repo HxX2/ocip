@@ -22,7 +22,7 @@ echo "Loading configuration from: $CONFIG_FILE"
 if ! command -v jq &> /dev/null; then
     echo "Error: 'jq' is required but not installed."
     echo "Install it with:"
-    echo "  - Ubuntu/Debian: sudo apt-get install jq"
+    echo "  - Ubuntu/Debian: sudo apt install jq"
     echo "  - macOS: brew install jq"
     echo "  - Windows: Download from https://stedolan.github.io/jq/download/"
     exit 1

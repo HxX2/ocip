@@ -69,12 +69,25 @@ export OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING=true
 
 echo "------------------------------------------------"
 echo "Fetching Availability Domains (ADs) for region $REGION..."
-# Get ADs, trim whitespace, remove quotes, and store in an array
-ADS=($(oci iam availability-domain list --region "$REGION" --query "data[].name" --raw-output 2>&1))
 
-if [ ${#ADS[@]} -eq 0 ] || [[ "${ADS[0]}" == *"Error"* ]]; then
-    echo "Could not fetch Availability Domains. Check your region and OCI config."
+# Get ADs using proper JSON parsing
+AD_OUTPUT=$(oci iam availability-domain list --region "$REGION" 2>&1)
+
+# Check if the command was successful
+if [[ "$AD_OUTPUT" == *"Error"* ]] || [[ "$AD_OUTPUT" == *"ServiceError"* ]]; then
+    echo "Error fetching Availability Domains:"
+    echo "$AD_OUTPUT"
     echo "Make sure you have run 'oci setup config' first."
+    exit 1
+fi
+
+# Parse the JSON output to get AD names
+mapfile -t ADS < <(echo "$AD_OUTPUT" | jq -r '.data[].name' 2>/dev/null)
+
+if [ ${#ADS[@]} -eq 0 ]; then
+    echo "Could not parse Availability Domains. Check your region and OCI config."
+    echo "Raw output:"
+    echo "$AD_OUTPUT"
     exit 1
 fi
 

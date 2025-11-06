@@ -103,8 +103,9 @@ do
         ATTEMPT=$((ATTEMPT + 1))
         TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
         echo "[$TIMESTAMP] Attempt #$ATTEMPT - Trying AD: $AD"
+        echo "⏳ Sending request to OCI (this may take 10-30 seconds)..."
         
-        # Command to launch the instance (without --wait-for-state to avoid hanging)
+        # Command to launch the instance (captures output but shows we're waiting)
         OUTPUT=$(oci compute instance launch \
             --region "$REGION" \
             --compartment-id "$COMPARTMENT_ID" \
@@ -120,6 +121,12 @@ do
         
         # Check the exit code of the last command
         EXIT_CODE=$?
+        
+        echo ""
+        echo "━━━━━━━━━━ SERVER RESPONSE ━━━━━━━━━━"
+        echo "$OUTPUT"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
         
         # Check for rate limiting
         if echo "$OUTPUT" | grep -qi "TooManyRequests\|too many requests"; then

@@ -6,18 +6,22 @@ A bash script that automatically attempts to create an Oracle Cloud Infrastructu
 
 Oracle's Always Free Ampere A1 instances are highly sought after but often show "Out of capacity" errors. This script:
 
-- ✅ Loops through all Availability Domains in your region
-- ✅ Continuously retries until an instance is successfully created
-- ✅ Displays timestamps and attempt counts for tracking
-- ✅ Validates your input IDs before starting
-- ✅ Can run for hours or days until capacity is found
+- ✅ **Config file based** - Set your parameters once in `config.json`
+- ✅ **Loops through all Availability Domains** in your region
+- ✅ **Continuously retries** until an instance is successfully created
+- ✅ **Rate limiting protection** - Automatically handles "TooManyRequests" errors
+- ✅ **Shows full server responses** - See exactly what OCI returns
+- ✅ **Timestamps and attempt counts** for tracking progress
+- ✅ **Validates inputs** before starting
+- ✅ **Can run for hours or days** until capacity is found
 
 ## ⚠️ Important Notes
 
 - **This can take a LONG time**: Days or even weeks depending on region and demand
 - **Leave it running**: Use `screen` or `tmux` to keep it running in the background
 - **Always Free limits**: You get up to 4 OCPUs and 24GB RAM total across all A1 instances
-- **The script does NOT save your credentials**: You enter them each time you run it
+- **Rate limiting**: Script waits 90 seconds between attempts, 5 minutes if rate limited
+- **Configuration saved**: Your settings are stored in `config.json` (keep it secure!)
 
 ---
 
@@ -25,9 +29,9 @@ Oracle's Always Free Ampere A1 instances are highly sought after but often show 
 
 You must complete these steps manually before running the script.
 
-### 1. Install OCI CLI
+### 1. Install Required Tools
 
-Install the Oracle Cloud Infrastructure command-line tool:
+**Install OCI CLI:**
 
 **Linux/macOS:**
 ```bash
@@ -39,6 +43,19 @@ bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scrip
 - Or use PowerShell:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.ps1'))"
+```
+
+**Install jq (JSON processor):**
+
+```bash
+# Ubuntu/Debian
+sudo apt install jq
+
+# macOS
+brew install jq
+
+# Windows (Git Bash/WSL)
+# Download from: https://stedolan.github.io/jq/download/
 ```
 
 ### 2. Configure OCI CLI
@@ -68,103 +85,181 @@ The setup will generate an API key pair and save it to `~/.oci/oci_api_key.pem`.
 
 ---
 
-## How to Find Your IDs
+## Configuration Setup
 
-The script will ask you for these values. Here's where to find them in the OCI Console:
+### Step 1: Create Your Config File
 
-### Compartment ID
-1. Go to **Identity & Security** → **Compartments**
-2. Find your compartment (or use the root compartment)
-3. Click it and copy the **OCID**
+Copy the example config and edit it with your details:
 
-**Example:** `ocid1.compartment.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxx`
-
-### Subnet ID
-1. Go to **Networking** → **Virtual Cloud Networks**
-2. Click your VCN (create one if you don't have it)
-3. Click **Subnets** in the left menu
-4. Click your subnet and copy the **OCID**
-
-**Example:** `ocid1.subnet.oc1.iad.aaaaaaaxxxxxxxxxxxxxxxxxxxxx`
-
-### Image ID
-1. Go to **Compute** → **Instances** → **Create Instance**
-2. In the "Image and shape" section, click **Change image**
-3. Select **Platform Images**
-4. Choose an **Always Free-eligible** ARM64 image (like Ubuntu or Oracle Linux)
-5. Copy the **OCID** shown
-
-
-> **Note:** Image IDs are region-specific. Make sure to use an image from your region.
-
-### Region
-This is your OCI region identifier. Common examples:
-- `us-ashburn-1` (US East)
-- `eu-frankfurt-1` (Germany)
-- `ap-tokyo-1` (Japan)
-
-Your region should match what you configured during `oci setup config`.
-
-### SSH Public Key
-This is the full text of your SSH public key file, typically located at:
-- Linux/macOS: `~/.ssh/id_rsa.pub`
-- Windows: `C:\Users\YourName\.ssh\id_rsa.pub`
-
-**To view it:**
 ```bash
-cat ~/.ssh/id_rsa.pub
+cp config.example.json config.json
+nano config.json  # or use your preferred editor
 ```
 
-It should look like: `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...`
+### Step 2: Fill in the Required Parameters
 
-**Don't have an SSH key?** Generate one:
+Here's how to get each parameter using OCI CLI or the console:
+
+#### 🔹 **compartment_id** (Tenancy OCID)
+
 ```bash
-ssh-keygen -t rsa -b 4096
+# List compartments
+oci iam compartment list --all
+```
+**Console:** Identity & Security → Compartments → Copy OCID
+
+---
+
+#### 🔹 **image_id** (ARM64 Image OCID)
+
+```bash
+# List images
+oci compute image list --compartment-id <tenancy-ocid> --shape "VM.Standard.A1.Flex" --region <region> --output table
+```
+**Console:** Compute → Instances → Create Instance → Change Image → Copy OCID
+
+> **Note:** Image IDs are region-specific!
+
+---
+
+#### 🔹 **subnet_id** (Subnet OCID)
+
+```bash
+# List subnets
+oci network subnet list --compartment-id <tenancy-ocid> --region <region> --output table
+```
+**Console:** Networking → Virtual Cloud Networks → Select VCN → Subnets → Copy OCID
+
+---
+
+#### 🔹 **region** (OCI Region)
+
+```bash
+# List regions
+oci iam region list --query "data[].name" --output table
+```
+**Common:** `us-ashburn-1`, `us-phoenix-1`, `eu-marseille-1`, `eu-frankfurt-1`, `uk-london-1`, `ap-tokyo-1`
+
+---
+
+#### 🔹 **ssh_key_path** (SSH Public Key Path)
+
+```bash
+# Check existing keys
+ls ~/.ssh/*.pub
+
+# Generate new key (if needed)
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+**Path:** `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`
+
+---
+
+#### 🔹 **Other Parameters**
+
+```json
+{
+  "ocpu_count": 4,              // 1-4 (max: 4)
+  "memory_in_gbs": 24,          // 6-24 (max: 24)
+  "display_name": "ampere-vm",  // Instance name
+  "rate_limit_wait": 90,        // Seconds between attempts
+  "rate_limit_cooldown": 300    // Cooldown after rate limit
+}
+```
+
+---
+
+### Example config.json
+
+```json
+{
+  "compartment_id": "ocid1.compartment.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "image_id": "ocid1.image.oc1.REGION.aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "subnet_id": "ocid1.subnet.oc1.REGION.aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "region": "us-ashburn-1",
+  "ocpu_count": 4,
+  "memory_in_gbs": 24,
+  "ssh_key_path": "~/.ssh/id_rsa.pub",
+  "display_name": "AlwaysFree-ARM-Instance",
+  "rate_limit_wait": 90,
+  "rate_limit_cooldown": 300
+}
 ```
 
 ---
 
 ## How to Use the Script
 
-### 1. Make the script executable (Linux/macOS)
+### 1. Make the script executable (Linux/macOS/Git Bash)
 ```bash
 chmod +x create-ampere-instance.sh
 ```
 
 ### 2. Run the script
+
+**With default config.json:**
 ```bash
 ./create-ampere-instance.sh
 ```
 
-### 3. Enter your details when prompted
-- Compartment ID
-- Image ID  
-- Subnet ID
-- Region
-- OCPU count (1-4, default: 4)
-- Memory in GB (6-24, default: 24)
-- SSH public key (paste and press Ctrl+D)
-
-### 4. Let it run
-The script will continuously attempt to create the instance. You'll see output like:
-
-```
-[2025-11-06 10:30:45] Attempt #1 - Trying AD: nUoC:US-ASHBURN-AD-1
-Failed in nUoC:US-ASHBURN-AD-1 (likely 'Out of Capacity').
-Waiting 10 seconds before trying next AD...
-[2025-11-06 10:31:00] Attempt #2 - Trying AD: nUoC:US-ASHBURN-AD-2
-...
-```
-
-### 5. Keep it running in the background
-
-**Using `screen` (recommended):**
+**With custom config file:**
 ```bash
+./create-ampere-instance.sh my-config.json
+```
+
+### 3. Monitor the output
+
+**Example output:**
+```
+--- Oracle Cloud ARM Instance Provisioner ---
+Loading configuration from: config.json
+Found 1 ADs: vBLH:EU-MARSEILLE-1-AD-1
+Configuration: VM.Standard.A1.Flex | 4 OCPUs | 24 GB | eu-marseille-1
+⚠️  Rate Limiting: 90s between attempts
+------------------------------------------------
+[2025-11-06 15:30:45] Attempt #1 - Trying AD: vBLH:EU-MARSEILLE-1-AD-1
+⏳ Sending request to OCI...
+
+━━━━━━━━━━ SERVER RESPONSE ━━━━━━━━━━
+{"code": "InternalError", "message": "Out of host capacity"}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ No capacity in vBLH:EU-MARSEILLE-1-AD-1
+⏳ Waiting 90 seconds before next attempt...
+```
+
+### 4. Keep it running in the background
+
+```bash
+# Using screen (recommended)
 screen -S oci-provision
 ./create-ampere-instance.sh
-# Press Ctrl+A then D to detach
-# Reattach later with: screen -r oci-provision
+# Ctrl+A then D to detach, screen -r oci-provision to reattach
+
+# Using tmux
+tmux new -s oci-provision
+./create-ampere-instance.sh
+# Ctrl+B then D to detach, tmux attach -t oci-provision to reattach
+
+# Using nohup
+nohup ./create-ampere-instance.sh > provision.log 2>&1 &
+tail -f provision.log  # Check progress
 ```
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| **jq not installed** | `sudo apt install jq` or `brew install jq` |
+| **Can't fetch ADs** | Check region name and `~/.oci/config` file |
+| **TooManyRequests** | Normal! Script auto-waits 5 min. Don't spam requests. |
+| **Out of capacity** | Expected! Keep running. May take days/weeks. Try lower resources. |
+| **Fails immediately** | Check `config.json` syntax, validate OCIDs, verify SSH key path exists |
+| **Debug mode** | Run: `bash -x create-ampere-instance.sh` |
+
+---
 
 ## Configuration Tips
 
@@ -181,6 +276,8 @@ screen -S oci-provision
 - This maximizes your chances as Oracle often releases capacity in full increments
 
 ### If Struggling to Get Capacity
-Try requesting less:
-- **OCPUs**: 1 or 2
-- **Memory**: 6 or 12 GB
+Try adjusting your `config.json`:
+- **OCPUs**: 1 or 2 (instead of 4)
+- **Memory**: 6 or 12 GB (instead of 24)
+- **Different region**: Some regions have more capacity
+- **Increase wait times**: Set `rate_limit_wait` to 120-180 seconds
